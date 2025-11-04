@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI身だしなみチェッカー (画像認識版)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Interフォントの読み込み -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Noto Sans JPをデフォルトフォントに設定 */
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+        }
+        /* ローディングスピナー */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* 画像プレビューのスタイル */
+        .preview-img {
+            max-width: 100%;
+            max-height: 200px;
+            height: auto;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 1rem;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        /* ファイル入力のスタイル */
+        .file-input-label {
+            display: block;
+            width: 100%;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            border: 2px dashed #cbd5e1;
+            background-color: #f8fafc;
+            color: #475569;
+            font-semibold: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .file-input-label:hover {
+            background-color: #f1f5f9;
+            border-color: #94a3b8;
+        }
+        .file-input-label.has-file {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+            color: #1d4ed8;
+        }
+        .file-input {
+            display: none; /* input[type=file] を隠す */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl p-6 md:p-10 w-full max-w-3xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">AI身だしなみチェッカー</h1>
+            <p class="text-gray-600">こんにちは！ 服装指導スペシャリストです。<br>3枚の写真から、AIが服装規程に合っているかチェックするよ。</p>
+        </header>
+
+        <!-- 1. 画像アップロードセクション -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">1. チェックする写真をアップロード</h2>
+            <p class="text-gray-600 mb-6">「全身」「顔」「手先」の3枚の写真をそれぞれアップロードしてね。画像はチェックが終わったら消えるから安心してね。</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- 全身 -->
+                <div class="text-center">
+                    <label for="imageUploader1" class="file-input-label" id="labelForImage1">
+                        <span id="fileName1">① 全身の写真</span>
+                    </label>
+                    <input type="file" id="imageUploader1" accept="image/*" class="file-input" data-label-id="labelForImage1" data-preview-id="imagePreview1" data-filename-id="fileName1">
+                    <img id="imagePreview1" src="#" alt="全身のプレビュー" class="preview-img hidden">
+                </div>
+                <!-- 顔 -->
+                <div class="text-center">
+                    <label for="imageUploader2" class="file-input-label" id="labelForImage2">
+                        <span id="fileName2">② 顔の写真</span>
+                    </label>
+                    <input type="file" id="imageUploader2" accept="image/*" class="file-input" data-label-id="labelForImage2" data-preview-id="imagePreview2" data-filename-id="fileName2">
+                    <img id="imagePreview2" src="#" alt="顔のプレビュー" class="preview-img hidden">
+                </div>
+                <!-- 手先 -->
+                <div class="text-center">
+                    <label for="imageUploader3" class="file-input-label" id="labelForImage3">
+                        <span id="fileName3">③ 手先の写真</span>
+                    </label>
+                    <input type="file" id="imageUploader3" accept="image/*" class="file-input" data-label-id="labelForImage3" data-preview-id="imagePreview3" data-filename-id="fileName3">
+                    <img id="imagePreview3" src="#" alt="手先のプレビュー" class="preview-img hidden">
+                </div>
+            </div>
+        </section>
+
+
+        <!-- 2. アドバイス生成ボタン -->
+        <section class="mt-10 text-center">
+            <button id="getAdviceButton" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                3枚の写真でチェック開始！
+            </button>
+        </section>
+
+        <!-- 3. 結果・アドバイス表示エリア -->
+        <section id="adviceResult" class="mt-8 hidden">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">スペシャリストからのアドバイス</h2>
+            <!-- ローディングスピナー -->
+            <div id="loadingSpinner" class="flex justify-center items-center py-6">
+                <div class="loader"></div>
+                <p class="ml-4 text-gray-600">AIが写真をチェックしているよ...</p>
+            </div>
+            <!-- アドバイス表示欄 -->
+            <div id="adviceText" class="hidden bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-6 rounded-lg shadow-md whitespace-pre-wrap leading-relaxed">
+                <!-- ここにGeminiからのアドバイスが表示される -->
+            </div>
+            <!-- エラー表示欄 -->
+            <div id="errorMessage" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-lg shadow-md">
+                <!-- エラーメッセージ -->
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- 1. 画像プレビュー機能とボタン有効化 ---
+        const uploader1 = document.getElementById('imageUploader1');
+        const uploader2 = document.getElementById('imageUploader2');
+        const uploader3 = document.getElementById('imageUploader3');
+        const getAdviceButton = document.getElementById('getAdviceButton');
+
+        const fileInputs = [uploader1, uploader2, uploader3];
+
+        fileInputs.forEach(input => {
+            input.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                const preview = document.getElementById(event.target.dataset.previewId);
+                const label = document.getElementById(event.target.dataset.labelId);
+                const fileNameSpan = document.getElementById(event.target.dataset.filenameId);
+
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.classList.remove('hidden');
+                    }
+                    reader.readAsDataURL(file);
+                    // ファイル名を短縮して表示
+                    const fileName = file.name.length > 20 ? file.name.substring(0, 17) + '...' : file.name;
+                    fileNameSpan.textContent = fileName;
+                    label.classList.add('has-file');
+                } else {
+                    preview.classList.add('hidden');
+                    preview.src = '#';
+                    fileNameSpan.textContent = `① 全身の写真`; // デフォルトに戻す（要修正）
+                    label.classList.remove('has-file');
+                }
+                
+                // 3枚全ての画像が選択されたらボタンを有効化
+                if (uploader1.files[0] && uploader2.files[0] && uploader3.files[0]) {
+                    getAdviceButton.disabled = false;
+                    getAdviceButton.textContent = 'チェック完了！ アドバイスをもらう';
+                } else {
+                    getAdviceButton.disabled = true;
+                    getAdviceButton.textContent = '3枚の写真でチェック開始！';
+                }
+            });
+        });
+
+
+        // --- 2. Gemini API 呼び出し機能 ---
+        const adviceResult = document.getElementById('adviceResult');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const adviceText = document.getElementById('adviceText');
+        const errorMessage = document.getElementById('errorMessage');
+
+        getAdviceButton.addEventListener('click', async () => {
+            // 結果表示エリアを初期化
+            adviceResult.classList.remove('hidden');
+            loadingSpinner.classList.remove('hidden');
+            adviceText.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            getAdviceButton.disabled = true; // 処理中はボタンを無効化
+            getAdviceButton.textContent = 'チェック中...';
+
+            const file1 = uploader1.files[0];
+            const file2 = uploader2.files[0];
+            const file3 = uploader3.files[0];
+
+            if (!file1 || !file2 || !file3) {
+                errorMessage.textContent = '3枚すべての画像をアップロードしてね。';
+                errorMessage.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+                getAdviceButton.disabled = false; // エラー時はボタンを戻す
+                getAdviceButton.textContent = 'チェック完了！ アドバイスをもらう';
+                return;
+            }
+
+            try {
+                // 3枚の画像をBase64にエンコード
+                const base64Image1 = await fileToBase64(file1);
+                const base64Image2 = await fileToBase64(file2);
+                const base64Image3 = await fileToBase64(file3);
+
+                // AI呼び出し
+                const advice = await callGeminiApi(base64Image1, base64Image2, base64Image3);
+                adviceText.textContent = advice;
+                adviceText.classList.remove('hidden');
+            } catch (error) {
+                console.error("API呼び出しエラー:", error);
+                errorMessage.textContent = `アドバイスの取得中にエラーが発生しました。\n(${error.message})\n少し時間をおいてから、もう一度試してみてね。`;
+                errorMessage.classList.remove('hidden');
+            } finally {
+                loadingSpinner.classList.add('hidden');
+                getAdviceButton.disabled = false; // 完了後ボタンを戻す
+                getAdviceButton.textContent = 'もう一度チェックする';
+            }
+        });
+
+        // ファイルをBase64に変換するヘルパー関数
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    // "data:image/jpeg;base64," のようなプレフィックスを削除
+                    const base64Data = reader.result.split(',')[1];
+                    resolve({
+                        mimeType: file.type,
+                        data: base64Data
+                    });
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+
+        // --- Gemini API 呼び出し（Exponential Backoff 付き） ---
+        async function callGeminiApi(image1, image2, image3, maxRetries = 5) {
+            const apiKey = ""; // Canvas環境では空文字列のままにします
+            // マルチモーダルモデル（gemini-2.5-flash-preview-09-2025）を指定
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            const systemPrompt = "あなたは高校生の服装指導のスペシャリストです。生徒が3枚の写真（①全身、②顔、③手先）を送ってきました。以下の【服装規程のポイント】と写真を照らし合わせ、もし規程と違う部分があれば、生徒が前向きに直せるような優しく、あたたかいアドバイスをしてください。厳しく叱るのではなく、生徒に寄り添う口調（「〜してみようね」「〜すると、もっと素敵だよ」「〜かな？」）でお願いします。もし規程をすべて守れているようであれば、そのことを褒めてあげてください。AIによる判断なので、不確かな点は「〜のように見えるけれど、どうかな？」と優しく尋ねる形にしてください。";
+
+            // ユーザーが送信するテキストプロンプト（規程を含む）
+            const userPrompt = `
+こんにちは！ この3枚の写真（①全身、②顔、③手先）を見て、服装規程に合っているかチェックしてほしいです。
+
+【服装規程のポイント】
+1.  **着こなし（①全身写真でチェック）:**
+    * 上着（ブレザー・学ラン）の前のボタンは留めてるか。
+    * シャツの裾はズボン・スカートの中にきちんと入ってるか。
+    * （ブレザーの場合）ネクタイ・リボンを着用し、シャツの一番上のボタンも留めてるか。
+    * （スカートの場合）裾は膝の中心にかかる長さか。
+    * ニットはブレザーの裾から出ていないか。
+2.  **顔（②顔写真でチェック）:**
+    * 化粧（アイシャドウ、色のついたリップ、マスカラなど）はしていないか。
+    * ピアスなどの装飾品は付けていないか。
+3.  **手先（③手先の写真でチェック）:**
+    * つめは短く清潔に保たれているか。
+    * マニキュア（透明や薄い色も含む）はしていないか。
+
+以上の点をチェックして、アドバイスをお願いします！
+    `;
+
+            const payload = {
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            { text: userPrompt },
+                            { inlineData: { mimeType: image1.mimeType, data: image1.data } }, // 全身
+                            { inlineData: { mimeType: image2.mimeType, data: image2.data } }, // 顔
+                            { inlineData: { mimeType: image3.mimeType, data: image3.data } }  // 手先
+                        ]
+                    }
+                ],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            let delay = 1000; // 最初の待機時間 (1秒)
+            
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        // 429 (Too Many Requests) や 5xx サーバーエラーの場合リトライ
+                        if (response.status === 429 || response.status >= 500) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        // その他のクライアントエラーはリトライしない
+                        const errorData = await response.json();
+                        throw new Error(`APIエラー: ${errorData.error?.message || response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        return candidate.content.parts[0].text;
+                    } else {
+                        // 稀にコンテンツが空で返る場合（セーフティなど）
+                        if (candidate && candidate.finishReason === 'SAFETY') {
+                           return "AIが安全上の理由で応答をブロックしました。別の写真で試してみてね。";
+                        }
+                        throw new Error("APIから有効なレスポンスがありませんでした。");
+                    }
+                
+                } catch (error) {
+                    console.warn(`API呼び出し試行 ${i + 1} が失敗: ${error.message}`);
+                    if (i === maxRetries - 1) {
+                        // 最終リトライでも失敗
+                        throw new Error(`API呼び出しに失敗しました: ${error.message}`);
+                    }
+                    // 指数バックオフ
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // 待機時間を倍増
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
